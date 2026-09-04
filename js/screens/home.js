@@ -46,23 +46,25 @@ export async function renderHome(container) {
         <div class="hero-label">week streak</div>
       </div>
 
-      <div class="card">
-        <div class="big-stat" style="padding:6px 8px;">
-          <div class="num">${weekStatus.count}/${weekStatus.goal}</div>
-          <div class="lbl">workouts this week ${weekStatus.onTrack ? '· on track' : ''}</div>
+      <div class="home-stack">
+        <div class="card">
+          <div class="big-stat" style="padding:6px 8px;">
+            <div class="num">${weekStatus.count}/${weekStatus.goal}</div>
+            <div class="lbl">workouts this week ${weekStatus.onTrack ? '· on track' : ''}</div>
+          </div>
         </div>
-      </div>
 
-      ${missingPrompts.map((p) => `
-        <div class="prompt-banner">
-          <p>${escapeHtml(p.label)}</p>
-          <a href="${p.href}" class="btn btn-ghost btn-sm">Log</a>
+        ${missingPrompts.map((p) => `
+          <div class="prompt-banner">
+            <p>${escapeHtml(p.label)}</p>
+            <a href="${p.href}" class="btn btn-ghost btn-sm">Log</a>
+          </div>
+        `).join('')}
+
+        <div class="quick-actions">
+          <a href="#/workout" class="btn btn-primary btn-block">Start Workout</a>
+          <a href="#/body" class="btn btn-secondary btn-block">Log Weight</a>
         </div>
-      `).join('')}
-
-      <div class="quick-actions">
-        <a href="#/workout" class="btn btn-primary btn-block">Start Workout</a>
-        <a href="#/body" class="btn btn-secondary btn-block">Log Weight</a>
       </div>
 
       <div class="section mt-16">
