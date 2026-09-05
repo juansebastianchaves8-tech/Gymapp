@@ -68,22 +68,32 @@ function registerServiceWorker() {
     window.addEventListener('load', doRegister);
   }
 
-  // Only reload when *we* asked the waiting worker to take over (the user
-  // tapped the update banner). Without this guard, the activate handler's
-  // clients.claim() also fires controllerchange on a plain first install
-  // (no prior controller), which would reload the page immediately every
-  // time the app is opened fresh.
+  // Only reload from controllerchange when *we* asked the waiting worker
+  // to take over (the user tapped the update banner). Without this guard,
+  // the activate handler's clients.claim() also fires controllerchange on
+  // a plain first install (no prior controller), which would reload the
+  // page immediately every time the app is opened fresh.
   let updateRequested = false;
   let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!updateRequested || refreshing) return;
+  const doReload = () => {
+    if (refreshing) return;
     refreshing = true;
     window.location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (updateRequested) doReload();
   });
 
   window.requestSwUpdate = (reg) => {
     updateRequested = true;
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    // controllerchange can be unreliable in some browsers' PWA/standalone
+    // mode, so don't leave "tap to refresh" doing nothing if it never
+    // fires — force the reload shortly after regardless. The service
+    // worker's network-first strategy means a plain reload alone already
+    // fetches fresh app files when online, so this is a safe fallback
+    // even if skipWaiting never took effect.
+    setTimeout(doReload, 800);
   };
 }
 
@@ -91,7 +101,11 @@ function showUpdateBanner(reg) {
   const banner = document.getElementById('update-banner');
   const btn = document.getElementById('update-banner-btn');
   banner.hidden = false;
-  btn.onclick = () => window.requestSwUpdate(reg);
+  btn.onclick = () => {
+    btn.textContent = 'Refreshing...';
+    btn.disabled = true;
+    window.requestSwUpdate(reg);
+  };
 }
 
 boot();

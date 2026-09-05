@@ -12,7 +12,7 @@
   --warn: #ffb84d;
   --radius: 14px;
   --radius-sm: 9px;
-  --nav-h: 64px;
+  --nav-h: 84px;
   --top-h: 52px;
   font-size: 16px;
 }
@@ -123,12 +123,13 @@ a { color: var(--accent); text-decoration: none; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   color: var(--text-dim);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 600;
+  padding-bottom: 4px;
 }
-.nav-link svg { width: 22px; height: 22px; fill: currentColor; }
+.nav-link svg { width: 25px; height: 25px; fill: currentColor; }
 .nav-link.active { color: var(--accent); }
 
 /* ---------- Cards / layout ---------- */
@@ -150,7 +151,7 @@ a { color: var(--accent); text-decoration: none; }
 /* ---------- Home ---------- */
 .hero {
   text-align: center;
-  padding: 28px 12px 8px;
+  padding: 28px 12px 20px;
 }
 .hero-number {
   font-size: 4rem;
@@ -163,6 +164,13 @@ a { color: var(--accent); text-decoration: none; }
 .big-stat { text-align: center; padding: 14px 8px; }
 .big-stat .num { font-size: 2rem; font-weight: 800; }
 .big-stat .lbl { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
+
+.home-stack { display: flex; flex-direction: column; gap: 16px; }
+.home-stack > .card,
+.home-stack > .prompt-banner,
+.home-stack > .quick-actions {
+  margin: 0;
+}
 
 .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
 .btn {
@@ -219,11 +227,19 @@ a { color: var(--accent); text-decoration: none; }
 }
 .field input, .field select, .field textarea {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 11px 12px;
   font-size: 1rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.field select {
+  -webkit-appearance: menulist;
+  appearance: menulist;
 }
 .field input:focus, .field select:focus, .field textarea:focus {
   outline: none;
