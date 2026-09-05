@@ -50,7 +50,7 @@ async function handleHashChange() {
         if (typeof result === 'function') cleanupFn = result;
       } catch (err) {
         console.error('Screen failed to render:', err);
-        container.innerHTML = '<div class="screen"><p>Something went wrong loading this screen. Try again, or reopen the app.</p></div>';
+        container.innerHTML = `<div class="screen"><p>Something went wrong loading this screen. Try again, or reopen the app.</p><pre style="white-space:pre-wrap;color:#ff5d5d;font-size:0.75rem;">${(err && err.stack) || err}</pre></div>`;
       }
       window.scrollTo(0, 0);
       return;

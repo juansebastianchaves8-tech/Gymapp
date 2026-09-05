@@ -14,14 +14,20 @@ export async function renderSettings(container) {
       <h1 class="screen-title">Settings</h1>
 
       <div class="section">
-        <div class="section-title">Streak Goal</div>
+        <div class="section-title">Weekly Goals</div>
         <div class="card">
-          <div class="field">
-            <label>Weekly workout goal</label>
-            <input type="number" min="1" id="goal-input" value="${settings.weeklyWorkoutGoal ?? 4}" />
-            <div class="hint">Meet this many workouts Mon-Sun to keep your streak alive.</div>
+          <div class="field-row">
+            <div class="field">
+              <label>Weekly workout goal</label>
+              <input type="number" min="1" id="goal-input" value="${settings.weeklyWorkoutGoal ?? 4}" />
+            </div>
+            <div class="field">
+              <label>Weekly Zone 2 cardio goal</label>
+              <input type="number" min="1" id="cardio-goal-input" value="${settings.cardioWeeklyGoal ?? 5}" />
+            </div>
           </div>
-          <button type="button" id="save-goal-btn" class="btn btn-primary btn-block">Save Goal</button>
+          <div class="hint">Meet each goal Mon-Sun to keep its streak alive. The overall streak needs both met the same week.</div>
+          <button type="button" id="save-goal-btn" class="btn btn-primary btn-block mt-8">Save Goals</button>
         </div>
       </div>
 
@@ -37,6 +43,28 @@ export async function renderSettings(container) {
             <div class="field"><label>Fat (g)</label><input type="number" min="0" id="t-fat" value="${targets.fat ?? ''}" /></div>
           </div>
           <button type="button" id="save-targets-btn" class="btn btn-primary btn-block">Save Targets</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Sleep Target (optional)</div>
+        <div class="card">
+          <div class="field">
+            <label>Avg hours slept target</label>
+            <input type="number" min="0" max="24" step="0.1" id="t-sleep-hours" value="${settings.sleepHoursTarget ?? ''}" />
+          </div>
+          <button type="button" id="save-sleep-target-btn" class="btn btn-primary btn-block">Save Sleep Target</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Body Metrics Targets (optional)</div>
+        <div class="card">
+          <div class="field-row">
+            <div class="field"><label>Target weight (lbs)</label><input type="number" min="0" step="0.1" id="t-weight" value="${settings.targetWeight ?? ''}" /></div>
+            <div class="field"><label>Target body fat (%)</label><input type="number" min="0" max="100" step="0.1" id="t-bodyfat" value="${settings.targetBodyFat ?? ''}" /></div>
+          </div>
+          <button type="button" id="save-body-target-btn" class="btn btn-primary btn-block">Save Body Targets</button>
         </div>
       </div>
 
@@ -74,6 +102,7 @@ export async function renderSettings(container) {
         <div class="card">
           <ul class="list">
             <li class="list-item"><a href="#/workout/history">Workouts</a></li>
+            <li class="list-item"><a href="#/workout?tab=cardio">Zone 2 Cardio</a></li>
             <li class="list-item"><a href="#/nutrition">Nutrition</a></li>
             <li class="list-item"><a href="#/sleep">Sleep</a></li>
             <li class="list-item"><a href="#/body">Body Metrics</a></li>
@@ -85,10 +114,11 @@ export async function renderSettings(container) {
 
   container.querySelector('#save-goal-btn').addEventListener('click', async () => {
     const goal = parseInt(container.querySelector('#goal-input').value, 10);
-    if (!goal || goal < 1) { showToast('Enter a valid goal'); return; }
-    await updateSettings({ weeklyWorkoutGoal: goal });
+    const cardioGoal = parseInt(container.querySelector('#cardio-goal-input').value, 10);
+    if (!goal || goal < 1 || !cardioGoal || cardioGoal < 1) { showToast('Enter valid goals'); return; }
+    await updateSettings({ weeklyWorkoutGoal: goal, cardioWeeklyGoal: cardioGoal });
     triggerSync();
-    showToast('Goal saved');
+    showToast('Goals saved');
   });
 
   container.querySelector('#save-targets-btn').addEventListener('click', async () => {
@@ -103,6 +133,24 @@ export async function renderSettings(container) {
     });
     triggerSync();
     showToast('Targets saved');
+  });
+
+  container.querySelector('#save-sleep-target-btn').addEventListener('click', async () => {
+    const v = container.querySelector('#t-sleep-hours').value;
+    await updateSettings({ sleepHoursTarget: v ? Number(v) : null });
+    triggerSync();
+    showToast('Sleep target saved');
+  });
+
+  container.querySelector('#save-body-target-btn').addEventListener('click', async () => {
+    const weight = container.querySelector('#t-weight').value;
+    const bodyFat = container.querySelector('#t-bodyfat').value;
+    await updateSettings({
+      targetWeight: weight ? Number(weight) : null,
+      targetBodyFat: bodyFat ? Number(bodyFat) : null,
+    });
+    triggerSync();
+    showToast('Body targets saved');
   });
 
   if (driveConfigured) {

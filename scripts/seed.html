@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Seed sample data</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #0a0f14; color: #eef2f5; padding: 32px; text-align: center; }
+  button { background: #00c88c; color: #04231a; border: none; padding: 14px 24px; border-radius: 10px; font-size: 1rem; font-weight: 700; cursor: pointer; margin: 6px; }
+  button.secondary { background: #1a222b; color: #eef2f5; border: 1px solid #232d38; }
+  button:disabled { opacity: 0.5; }
+  a { color: #00c88c; }
+  #status { margin-top: 20px; color: #8b98a5; }
+  hr { border: none; border-top: 1px solid #232d38; margin: 24px 0; }
+</style>
+</head>
+<body>
+  <h2>Dev: seed sample data</h2>
+  <p>Populates IndexedDB on this origin with ~8 weeks of made-up workouts, routines, body metrics, nutrition, and sleep entries.</p>
+  <button id="seed-btn" type="button">Seed full sample data</button>
+
+  <hr />
+  <p>Just adds Zone 2 cardio sessions (and cardio/sleep/body-metric goal settings) on top of whatever's already here — safe to run without duplicating your existing workouts/nutrition/sleep/body data.</p>
+  <button id="seed-cardio-btn" type="button" class="secondary">Seed cardio data only</button>
+
+  <div id="status"></div>
+  <p style="margin-top:24px;"><a href="../index.html">Back to app</a></p>
+
+  <script type="module">
+    import { seed, seedCardio } from './seed-sample-data.js';
+    const status = document.getElementById('status');
+
+    function wire(btn, fn, label) {
+      btn.addEventListener('click', async () => {
+        document.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+        status.textContent = label + '...';
+        try {
+          await fn();
+          status.textContent = 'Done. Opening the app...';
+          setTimeout(() => { window.location.href = '../index.html'; }, 600);
+        } catch (e) {
+          console.error(e);
+          status.textContent = 'Failed: ' + e.message + ' (see console)';
+          document.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+        }
+      });
+    }
+
+    wire(document.getElementById('seed-btn'), seed, 'Seeding');
+    wire(document.getElementById('seed-cardio-btn'), seedCardio, 'Seeding cardio');
+  </script>
+</body>
+</html>

@@ -144,9 +144,11 @@ a { color: var(--accent); text-decoration: none; }
 .home-stack { display: flex; flex-direction: column; gap: 16px; }
 .home-stack > .card,
 .home-stack > .prompt-banner,
-.home-stack > .quick-actions {
+.home-stack > .quick-actions,
+.home-stack > .grid-2 {
   margin: 0;
 }
+.home-stack > .grid-2 > .card { margin: 0; }
 
 .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
 .btn {

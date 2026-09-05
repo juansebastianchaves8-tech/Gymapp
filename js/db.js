@@ -6,7 +6,7 @@ import { uid, getWeekStart, isoDate } from './util.js';
 import { DEFAULT_EXERCISES } from './exercises-seed.js';
 
 const DB_NAME = 'gymapp';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const SETTINGS_ID = 'main';
 
 let dbPromise = null;
@@ -38,6 +38,10 @@ export function getDB() {
           const s = db.createObjectStore('bodyMetrics', { keyPath: 'id' });
           s.createIndex('date', 'date');
         }
+        if (!db.objectStoreNames.contains('cardioSessions')) {
+          const s = db.createObjectStore('cardioSessions', { keyPath: 'id' });
+          s.createIndex('date', 'date');
+        }
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'id' });
         }
@@ -66,9 +70,27 @@ export async function ensureSeeded() {
     await db.put('settings', {
       id: SETTINGS_ID,
       weeklyWorkoutGoal: 4,
+      cardioWeeklyGoal: 5,
       nutritionTargets: { calories: null, protein: null, carbs: null, fat: null },
+      sleepHoursTarget: null,
+      targetWeight: null,
+      targetBodyFat: null,
       streakCount: 0,
+      cardioStreakCount: 0,
+      overallStreakCount: 0,
       lastStreakWeekChecked: isoDate(getWeekStart()),
+    });
+  } else if (settings.cardioWeeklyGoal === undefined) {
+    // Migrating an install seeded before cardio tracking existed: backfill
+    // the new fields without touching anything the user already set.
+    await db.put('settings', {
+      ...settings,
+      cardioWeeklyGoal: settings.cardioWeeklyGoal ?? 5,
+      sleepHoursTarget: settings.sleepHoursTarget ?? null,
+      targetWeight: settings.targetWeight ?? null,
+      targetBodyFat: settings.targetBodyFat ?? null,
+      cardioStreakCount: settings.cardioStreakCount ?? 0,
+      overallStreakCount: settings.overallStreakCount ?? 0,
     });
   }
 }
@@ -190,22 +212,37 @@ export async function deleteBodyMetric(id) {
   return remove('bodyMetrics', id);
 }
 
+// ---- Cardio sessions (Zone 2 incline walk, etc.) ----
+export async function getCardioSessions() {
+  const all = await getAll('cardioSessions');
+  return all.sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+export async function saveCardioSession(entry) {
+  const toSave = entry.id ? entry : { ...entry, id: uid() };
+  await put('cardioSessions', toSave);
+  return toSave;
+}
+export async function deleteCardioSession(id) {
+  return remove('cardioSessions', id);
+}
+
 // ---- Full-state export/import (used by both Drive sync and manual JSON) ----
 export async function exportFullState() {
   const db = await getDB();
-  const [exercises, routines, workoutSessions, nutritionEntries, sleepEntries, bodyMetrics, settings] = await Promise.all([
+  const [exercises, routines, workoutSessions, nutritionEntries, sleepEntries, bodyMetrics, cardioSessions, settings] = await Promise.all([
     db.getAll('exercises'),
     db.getAll('routines'),
     db.getAll('workoutSessions'),
     db.getAll('nutritionEntries'),
     db.getAll('sleepEntries'),
     db.getAll('bodyMetrics'),
+    db.getAll('cardioSessions'),
     db.get('settings', SETTINGS_ID),
   ]);
   return {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
-    exercises, routines, workoutSessions, nutritionEntries, sleepEntries, bodyMetrics,
+    exercises, routines, workoutSessions, nutritionEntries, sleepEntries, bodyMetrics, cardioSessions,
     settings: settings || null,
   };
 }
@@ -214,9 +251,9 @@ export async function exportFullState() {
 // state-wins, single-device app: no merge logic).
 export async function importFullState(state) {
   const db = await getDB();
-  const stores = ['exercises', 'routines', 'workoutSessions', 'nutritionEntries', 'sleepEntries', 'bodyMetrics', 'settings'];
+  const stores = ['exercises', 'routines', 'workoutSessions', 'nutritionEntries', 'sleepEntries', 'bodyMetrics', 'cardioSessions', 'settings'];
   const tx = db.transaction(stores, 'readwrite');
-  for (const name of ['exercises', 'routines', 'workoutSessions', 'nutritionEntries', 'sleepEntries', 'bodyMetrics']) {
+  for (const name of ['exercises', 'routines', 'workoutSessions', 'nutritionEntries', 'sleepEntries', 'bodyMetrics', 'cardioSessions']) {
     await tx.objectStore(name).clear();
     for (const item of state[name] || []) {
       await tx.objectStore(name).put(item);

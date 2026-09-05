@@ -7,7 +7,7 @@ import {
 } from './drive.js';
 import {
   exportFullState, importFullState, getWorkoutSessions, getRoutines,
-  getNutritionEntries, getSleepEntries, getBodyMetrics,
+  getNutritionEntries, getSleepEntries, getBodyMetrics, getCardioSessions,
 } from './db.js';
 
 let debounceTimer = null;
@@ -54,11 +54,11 @@ async function doPush() {
 }
 
 async function isLocalDataEmpty() {
-  const [sessions, routines, nutrition, sleep, body] = await Promise.all([
-    getWorkoutSessions(), getRoutines(), getNutritionEntries(), getSleepEntries(), getBodyMetrics(),
+  const [sessions, routines, nutrition, sleep, body, cardio] = await Promise.all([
+    getWorkoutSessions(), getRoutines(), getNutritionEntries(), getSleepEntries(), getBodyMetrics(), getCardioSessions(),
   ]);
   return sessions.length === 0 && routines.length === 0 && nutrition.length === 0
-    && sleep.length === 0 && body.length === 0;
+    && sleep.length === 0 && body.length === 0 && cardio.length === 0;
 }
 
 // Called once on app boot. If a prior sign-in token is still valid, pushes

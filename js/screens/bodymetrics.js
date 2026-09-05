@@ -1,22 +1,16 @@
-import { getBodyMetrics, saveBodyMetric, deleteBodyMetric } from '../db.js';
+import { getBodyMetrics, saveBodyMetric, deleteBodyMetric, getSettings } from '../db.js';
 import { el, uid, isoDate, formatDate } from '../util.js';
 import { showToast } from '../components/toast.js';
 import { triggerSync } from '../sync.js';
+import { loadChartJs, CHART_COLORS, lineChart, goalDataset, createChartManager } from '../charts.js';
 
-let chartInstances = [];
-async function loadChartJs() {
-  if (window.Chart) return window.Chart;
-  const mod = await import('https://cdn.jsdelivr.net/npm/chart.js@4/+esm');
-  const Chart = mod.Chart || mod.default;
-  Chart.register(...(mod.registerables || []));
-  window.Chart = Chart;
-  return Chart;
-}
-function destroyCharts() { chartInstances.forEach((c) => c.destroy()); chartInstances = []; }
+// Module-scoped for the same reason as nutrition.js/sleep.js: this screen
+// re-renders itself in place on every save/delete.
+const charts = createChartManager();
 
 export async function renderBodyMetrics(container) {
-  destroyCharts();
-  const entries = await getBodyMetrics();
+  charts.destroyAll();
+  const [entries, settings] = await Promise.all([getBodyMetrics(), getSettings()]);
   let editingId = null;
 
   container.appendChild(el(`
@@ -143,18 +137,14 @@ export async function renderBodyMetrics(container) {
       const Chart = await loadChartJs();
       const asc = [...entries].sort((a, b) => new Date(a.date) - new Date(b.date));
       const labels = asc.map((e) => formatDate(e.date));
-      const opts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#232d38' }, ticks: { color: '#8b98a5' } }, y: { grid: { color: '#232d38' }, ticks: { color: '#8b98a5' } } } };
 
-      chartInstances.push(new Chart(container.querySelector('#chart-weight'), {
-        type: 'line',
-        data: { labels, datasets: [{ data: asc.map((e) => e.weight), borderColor: '#00c88c', backgroundColor: '#00c88c', tension: 0.25, spanGaps: true }] },
-        options: opts,
-      }));
-      chartInstances.push(new Chart(container.querySelector('#chart-bf'), {
-        type: 'line',
-        data: { labels, datasets: [{ data: asc.map((e) => e.bodyFatPercentage ?? null), borderColor: '#4da6ff', backgroundColor: '#4da6ff', tension: 0.25, spanGaps: true }] },
-        options: opts,
-      }));
+      const weightGoal = settings.targetWeight != null
+        ? [goalDataset(settings.targetWeight, labels.length, CHART_COLORS.goal, 'Target')] : [];
+      const bodyFatGoal = settings.targetBodyFat != null
+        ? [goalDataset(settings.targetBodyFat, labels.length, CHART_COLORS.goal, 'Target')] : [];
+
+      charts.register(lineChart(Chart, container.querySelector('#chart-weight'), labels, asc.map((e) => e.weight), CHART_COLORS.accent, null, { extraDatasets: weightGoal }));
+      charts.register(lineChart(Chart, container.querySelector('#chart-bf'), labels, asc.map((e) => e.bodyFatPercentage ?? null), CHART_COLORS.accent2, null, { extraDatasets: bodyFatGoal }));
     } catch (err) {
       console.warn('Chart.js failed to load (offline?):', err);
       container.querySelectorAll('.chart-wrap canvas').forEach((c) => {
@@ -163,5 +153,5 @@ export async function renderBodyMetrics(container) {
     }
   }
 
-  return destroyCharts;
+  return charts.destroyAll;
 }

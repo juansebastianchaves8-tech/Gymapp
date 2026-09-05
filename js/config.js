@@ -8,4 +8,4 @@ export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata
 
 // Bump this on every deploy that changes cached app files. The service
 // worker uses it to name its cache and detect updates.
-export const APP_VERSION = '1.0.2';
+export const APP_VERSION = '1.1.1';

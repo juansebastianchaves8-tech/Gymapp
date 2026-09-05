@@ -2,20 +2,16 @@ import { getNutritionEntries, saveNutritionEntry, deleteNutritionEntry, getSetti
 import { el, getWeekStart, isoDate, formatWeekLabel } from '../util.js';
 import { showToast } from '../components/toast.js';
 import { triggerSync } from '../sync.js';
+import { loadChartJs, CHART_COLORS, lineChart, goalDataset, createChartManager } from '../charts.js';
 
-let chartInstances = [];
-async function loadChartJs() {
-  if (window.Chart) return window.Chart;
-  const mod = await import('https://cdn.jsdelivr.net/npm/chart.js@4/+esm');
-  const Chart = mod.Chart || mod.default;
-  Chart.register(...(mod.registerables || []));
-  window.Chart = Chart;
-  return Chart;
-}
-function destroyCharts() { chartInstances.forEach((c) => c.destroy()); chartInstances = []; }
+// Module-scoped: this screen re-renders itself in place on every save/
+// delete (see reRender() below), so the manager must persist across those
+// calls rather than being recreated fresh each time, or the previous
+// render's Chart.js instances would never get destroyed.
+const charts = createChartManager();
 
 export async function renderNutrition(container) {
-  destroyCharts();
+  charts.destroyAll();
   const [entries, settings] = await Promise.all([getNutritionEntries(), getSettings()]);
   const targets = settings.nutritionTargets || {};
   const currentWeekISO = isoDate(getWeekStart());
@@ -91,6 +87,11 @@ export async function renderNutrition(container) {
 
   els.reset.addEventListener('click', () => loadWeekIntoForm(currentWeekISO));
 
+  function reRender() {
+    container.innerHTML = '';
+    renderNutrition(container);
+  }
+
   container.querySelector('#save-btn').addEventListener('click', async () => {
     const entry = {
       weekStartDate: editingWeek,
@@ -106,11 +107,6 @@ export async function renderNutrition(container) {
     showToast('Week saved');
     reRender();
   });
-
-  function reRender() {
-    container.innerHTML = '';
-    renderNutrition(container);
-  }
 
   if (entries.length) {
     const listEl = container.querySelector('#entry-list');
@@ -144,33 +140,41 @@ export async function renderNutrition(container) {
 
   if (entries.length) {
     try {
-    const Chart = await loadChartJs();
-    const asc = [...entries].sort((a, b) => new Date(a.weekStartDate) - new Date(b.weekStartDate));
-    const labels = asc.map((e) => formatWeekLabel(e.weekStartDate).split(' - ')[0]);
+      const Chart = await loadChartJs();
+      const asc = [...entries].sort((a, b) => new Date(a.weekStartDate) - new Date(b.weekStartDate));
+      const labels = asc.map((e) => formatWeekLabel(e.weekStartDate).split(' - ')[0]);
 
-    const calCanvas = container.querySelector('#chart-cal');
-    if (calCanvas) {
-      chartInstances.push(new Chart(calCanvas, {
-        type: 'line',
-        data: { labels, datasets: [{ data: asc.map((e) => e.avgCalories), borderColor: '#00c88c', backgroundColor: '#00c88c', tension: 0.25, spanGaps: true }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#232d38' }, ticks: { color: '#8b98a5' } }, y: { grid: { color: '#232d38' }, ticks: { color: '#8b98a5' } } } },
-      }));
-    }
-    const macroCanvas = container.querySelector('#chart-macro');
-    if (macroCanvas) {
-      chartInstances.push(new Chart(macroCanvas, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [
-            { label: 'Protein', data: asc.map((e) => e.avgProtein), borderColor: '#00c88c', backgroundColor: '#00c88c', tension: 0.25, spanGaps: true },
-            { label: 'Carbs', data: asc.map((e) => e.avgCarbs), borderColor: '#4da6ff', backgroundColor: '#4da6ff', tension: 0.25, spanGaps: true },
-            { label: 'Fat', data: asc.map((e) => e.avgFat), borderColor: '#ffb84d', backgroundColor: '#ffb84d', tension: 0.25, spanGaps: true },
-          ],
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: '#8b98a5' } } }, scales: { x: { grid: { color: '#232d38' }, ticks: { color: '#8b98a5' } }, y: { grid: { color: '#232d38' }, ticks: { color: '#8b98a5' } } } },
-      }));
-    }
+      const calCanvas = container.querySelector('#chart-cal');
+      if (calCanvas) {
+        const calGoal = targets.calories ? [goalDataset(targets.calories, labels.length, CHART_COLORS.goal, 'Target')] : [];
+        charts.register(lineChart(Chart, calCanvas, labels, asc.map((e) => e.avgCalories), CHART_COLORS.accent, null, { extraDatasets: calGoal }));
+      }
+      const macroCanvas = container.querySelector('#chart-macro');
+      if (macroCanvas) {
+        // All goal lines share the one consistent goal color (not each
+        // macro's own color) so a goal never reads as ambiguous with the
+        // actual progress line — they're distinguished from each other by
+        // their label and vertical position, not by color.
+        const macroGoals = [
+          targets.protein ? goalDataset(targets.protein, labels.length, CHART_COLORS.goal, 'Protein Goal') : null,
+          targets.carbs ? goalDataset(targets.carbs, labels.length, CHART_COLORS.goal, 'Carbs Goal') : null,
+          targets.fat ? goalDataset(targets.fat, labels.length, CHART_COLORS.goal, 'Fat Goal') : null,
+        ].filter(Boolean);
+        const chart = new Chart(macroCanvas, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Protein', data: asc.map((e) => e.avgProtein), borderColor: CHART_COLORS.accent, backgroundColor: CHART_COLORS.accent, tension: 0.25, spanGaps: true },
+              { label: 'Carbs', data: asc.map((e) => e.avgCarbs), borderColor: CHART_COLORS.accent2, backgroundColor: CHART_COLORS.accent2, tension: 0.25, spanGaps: true },
+              { label: 'Fat', data: asc.map((e) => e.avgFat), borderColor: CHART_COLORS.accent3, backgroundColor: CHART_COLORS.accent3, tension: 0.25, spanGaps: true },
+              ...macroGoals,
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: CHART_COLORS.text } } }, scales: { x: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text } }, y: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text } } } },
+        });
+        charts.register(chart);
+      }
     } catch (err) {
       console.warn('Chart.js failed to load (offline?):', err);
       container.querySelectorAll('.chart-wrap canvas').forEach((c) => {
@@ -179,5 +183,5 @@ export async function renderNutrition(container) {
     }
   }
 
-  return destroyCharts;
+  return charts.destroyAll;
 }

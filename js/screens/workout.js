@@ -1,11 +1,35 @@
-import { getExercises, getRoutines, getWorkoutSessions, saveWorkoutSession, deleteWorkoutSession } from '../db.js';
-import { el, uid, escapeHtml } from '../util.js';
+import {
+  getExercises, getRoutines, getWorkoutSessions, saveWorkoutSession, deleteWorkoutSession,
+  getCardioSessions, saveCardioSession, deleteCardioSession,
+} from '../db.js';
+import { el, uid, isoDate, formatDate, escapeHtml } from '../util.js';
 import { navigate } from '../router.js';
 import { pickExercise } from '../components/exercisePicker.js';
+import { pickRoutine } from '../components/routinePicker.js';
 import { triggerSync } from '../sync.js';
 import { showToast } from '../components/toast.js';
 
+function tabsBar(active) {
+  return `
+    <div class="tabs">
+      <button type="button" class="tab-strength-btn ${active === 'strength' ? 'active' : ''}">Strength</button>
+      <button type="button" class="tab-cardio-btn ${active === 'cardio' ? 'active' : ''}">Cardio</button>
+    </div>
+  `;
+}
+
+// Dispatches to Strength or Cardio logging. Only the bare /workout route
+// (no routine/session params) shows the toggle at all — starting from a
+// routine or editing an existing strength session always opens directly in
+// Strength mode with no tab chrome.
 export async function renderWorkout(container, params) {
+  const isBareRoute = !params.routineId && !params.sessionId;
+  const activeTab = isBareRoute && params.query?.tab === 'cardio' ? 'cardio' : 'strength';
+  if (activeTab === 'cardio') return renderCardioLog(container);
+  return renderStrengthWorkout(container, params, isBareRoute);
+}
+
+async function renderStrengthWorkout(container, params, tabsActive) {
   const exercises = await getExercises();
   let routine = null;
   let existingSession = null;
@@ -64,6 +88,7 @@ export async function renderWorkout(container, params) {
         <h1 class="screen-title">${escapeHtml(title)}</h1>
         ${!isEdit ? '<a href="#/workout/history" class="text-sm">History</a>' : ''}
       </div>
+      ${tabsActive ? tabsBar('strength') : ''}
       ${isEdit ? `
         <div class="field">
           <label>Date</label>
@@ -72,6 +97,7 @@ export async function renderWorkout(container, params) {
       ` : ''}
       <div id="exercise-list"></div>
       <button id="add-exercise-btn" type="button" class="btn btn-secondary btn-block">+ Add Exercise</button>
+      <button id="add-routine-btn" type="button" class="btn btn-secondary btn-block mt-8">+ Add Routine</button>
       ${isEdit ? '<button id="delete-session-btn" type="button" class="btn btn-danger btn-block mt-8">Delete Workout</button>' : ''}
       <div style="height:80px"></div>
     </div>
@@ -79,6 +105,10 @@ export async function renderWorkout(container, params) {
       <button id="finish-btn" type="button" class="btn btn-primary btn-block">${isEdit ? 'Save Changes' : 'Finish Workout'}</button>
     </div>
   `;
+
+  if (tabsActive) {
+    container.querySelector('.tab-cardio-btn').addEventListener('click', () => navigate('/workout?tab=cardio'));
+  }
 
   const listEl = container.querySelector('#exercise-list');
 
@@ -162,6 +192,37 @@ export async function renderWorkout(container, params) {
     renderList();
   });
 
+  container.querySelector('#add-routine-btn').addEventListener('click', async () => {
+    const routines = await getRoutines();
+    const chosen = await pickRoutine(routines);
+    if (!chosen) return;
+
+    let added = 0;
+    let skipped = 0;
+    for (const re of chosen.exercises) {
+      if (draft.exercises.some((d) => d.exerciseId === re.exerciseId)) { skipped++; continue; }
+      const ex = exercises.find((e) => e.id === re.exerciseId);
+      draft.exercises.push({
+        key: uid(),
+        exerciseId: re.exerciseId,
+        name: ex ? ex.name : 'Unknown exercise',
+        targetSets: re.targetSets || null,
+        targetReps: re.targetReps || null,
+        sets: [{ weight: '', reps: '' }],
+      });
+      added++;
+    }
+    renderList();
+
+    if (added === 0) {
+      showToast('Already added');
+    } else if (skipped > 0) {
+      showToast(`Added ${added} exercise${added === 1 ? '' : 's'} (${skipped} already added)`);
+    } else {
+      showToast(`Added ${added} exercise${added === 1 ? '' : 's'} from ${escapeHtml(chosen.name)}`);
+    }
+  });
+
   if (isEdit) {
     container.querySelector('#delete-session-btn').addEventListener('click', async () => {
       if (!confirm('Delete this workout?')) return;
@@ -207,4 +268,138 @@ export async function renderWorkout(container, params) {
     showToast(isEdit ? 'Workout updated' : 'Workout saved');
     navigate(isEdit ? '/workout/history' : '/home');
   });
+}
+
+// Simple flat-record cardio logging (Zone 2 incline walk etc.) — modeled on
+// the Body Metrics screen's form+list+edit+delete pattern rather than the
+// multi-set strength logging above, since cardio entries are single
+// records, not multi-exercise sessions. No charts here: cardio trends live
+// entirely on the Progress screen.
+async function renderCardioLog(container) {
+  const entries = await getCardioSessions();
+  let editingId = null;
+
+  container.appendChild(el(`
+    <div class="screen">
+      <h1 class="screen-title">Zone 2 Cardio</h1>
+      ${tabsBar('cardio')}
+
+      <div class="card" id="entry-form">
+        <h3 id="form-title">Log Cardio</h3>
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="f-date" value="${isoDate(new Date())}" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Minutes</label>
+            <input type="number" min="0" step="1" id="f-minutes" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label>Incline (%)</label>
+            <input type="number" min="0" step="0.5" id="f-incline" inputmode="decimal" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Distance (mi)</label>
+          <input type="number" min="0" step="0.1" id="f-distance" inputmode="decimal" />
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button type="button" id="save-btn" class="btn btn-primary btn-block">Save Entry</button>
+          <button type="button" id="cancel-btn" class="btn btn-secondary" hidden>Cancel</button>
+        </div>
+      </div>
+
+      <div class="section mt-16">
+        <div class="section-title">Recent Cardio</div>
+        ${entries.length === 0 ? '<div class="empty-state">No cardio logged yet.</div>' : '<ul class="list" id="entry-list"></ul>'}
+      </div>
+    </div>
+  `));
+
+  container.querySelector('.tab-strength-btn').addEventListener('click', () => navigate('/workout'));
+
+  const els = {
+    title: container.querySelector('#form-title'),
+    date: container.querySelector('#f-date'),
+    minutes: container.querySelector('#f-minutes'),
+    incline: container.querySelector('#f-incline'),
+    distance: container.querySelector('#f-distance'),
+    cancel: container.querySelector('#cancel-btn'),
+  };
+
+  function resetForm() {
+    editingId = null;
+    els.title.textContent = 'Log Cardio';
+    els.date.value = isoDate(new Date());
+    els.minutes.value = '';
+    els.incline.value = '';
+    els.distance.value = '';
+    els.cancel.hidden = true;
+  }
+
+  function loadIntoForm(entry) {
+    editingId = entry.id;
+    els.title.textContent = 'Edit Cardio';
+    els.date.value = isoDate(new Date(entry.date));
+    els.minutes.value = entry.minutes ?? '';
+    els.incline.value = entry.incline ?? '';
+    els.distance.value = entry.distance ?? '';
+    els.cancel.hidden = false;
+  }
+
+  els.cancel.addEventListener('click', resetForm);
+
+  function reRender() { container.innerHTML = ''; renderCardioLog(container); }
+
+  container.querySelector('#save-btn').addEventListener('click', async () => {
+    const minutes = els.minutes.value ? Number(els.minutes.value) : null;
+    if (!els.date.value || minutes === null) {
+      showToast('Date and minutes are required');
+      return;
+    }
+    await saveCardioSession({
+      id: editingId || uid(),
+      date: new Date(els.date.value).toISOString(),
+      minutes,
+      incline: els.incline.value ? Number(els.incline.value) : null,
+      distance: els.distance.value ? Number(els.distance.value) : null,
+    });
+    triggerSync();
+    showToast('Cardio saved');
+    reRender();
+  });
+
+  if (entries.length) {
+    const listEl = container.querySelector('#entry-list');
+    entries.forEach((e) => {
+      const parts = [`${e.minutes} min`];
+      if (e.incline != null) parts.push(`${e.incline}% incline`);
+      if (e.distance != null) parts.push(`${e.distance} mi`);
+      const row = el(`
+        <li class="list-item">
+          <div class="list-item-main">
+            <div class="list-item-title">${formatDate(e.date, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            <div class="list-item-sub">${escapeHtml(parts.join(' · '))}</div>
+          </div>
+          <div class="list-item-actions">
+            <button type="button" class="btn btn-secondary btn-sm edit-btn">Edit</button>
+            <button type="button" class="icon-btn danger delete-btn" aria-label="Delete">✕</button>
+          </div>
+        </li>
+      `);
+      row.querySelector('.edit-btn').addEventListener('click', () => {
+        loadIntoForm(e);
+        window.scrollTo(0, 0);
+      });
+      row.querySelector('.delete-btn').addEventListener('click', async () => {
+        if (!confirm('Delete this entry?')) return;
+        await deleteCardioSession(e.id);
+        triggerSync();
+        showToast('Deleted');
+        reRender();
+      });
+      listEl.appendChild(row);
+    });
+  }
 }

@@ -1,81 +1,15 @@
-import { getWorkoutSessions, getExercises, getBodyMetrics } from '../db.js';
+import { getWorkoutSessions, getExercises, getBodyMetrics, getCardioSessions, getSettings } from '../db.js';
 import { el, epley1RM, round1, getWeekStart, isoDate, formatDate, escapeHtml } from '../util.js';
-
-let chartInstances = [];
-
-async function loadChartJs() {
-  if (window.Chart) return window.Chart;
-  const mod = await import('https://cdn.jsdelivr.net/npm/chart.js@4/+esm');
-  const Chart = mod.Chart || mod.default;
-  Chart.register(...(mod.registerables || []));
-  window.Chart = Chart;
-  return Chart;
-}
-
-function destroyCharts() {
-  chartInstances.forEach((c) => c.destroy());
-  chartInstances = [];
-}
-
-const CHART_COLORS = {
-  accent: '#00c88c',
-  accent2: '#4da6ff',
-  grid: '#232d38',
-  text: '#8b98a5',
-};
-
-function baseOptions(yLabel) {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text, maxRotation: 0, autoSkip: true } },
-      y: {
-        grid: { color: CHART_COLORS.grid },
-        ticks: { color: CHART_COLORS.text },
-        title: yLabel ? { display: true, text: yLabel, color: CHART_COLORS.text } : undefined,
-      },
-    },
-  };
-}
-
-function lineChart(Chart, canvas, labels, data, color, yLabel) {
-  const chart = new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data,
-        borderColor: color,
-        backgroundColor: color,
-        pointRadius: 3,
-        tension: 0.25,
-        spanGaps: true,
-      }],
-    },
-    options: baseOptions(yLabel),
-  });
-  chartInstances.push(chart);
-  return chart;
-}
-
-function barChart(Chart, canvas, labels, data, color, yLabel) {
-  const chart = new Chart(canvas, {
-    type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: color }] },
-    options: baseOptions(yLabel),
-  });
-  chartInstances.push(chart);
-  return chart;
-}
+import { loadChartJs, CHART_COLORS, lineChart, barChart, goalDataset, createChartManager } from '../charts.js';
 
 export async function renderProgress(container) {
-  destroyCharts();
-  const [sessions, exercises, bodyMetrics] = await Promise.all([
-    getWorkoutSessions(), getExercises(), getBodyMetrics(),
+  const charts = createChartManager();
+
+  const [sessions, exercises, bodyMetrics, cardioSessions, settings] = await Promise.all([
+    getWorkoutSessions(), getExercises(), getBodyMetrics(), getCardioSessions(), getSettings(),
   ]);
   const sessionsAsc = [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const cardioAsc = [...cardioSessions].sort((a, b) => new Date(a.date) - new Date(b.date));
 
   // Exercises that actually have logged sets, most-logged first.
   const exerciseUsage = new Map();
@@ -109,6 +43,14 @@ export async function renderProgress(container) {
   });
   const weekKeys = [...weekCounts.keys()].sort();
 
+  // Cardio frequency per week, same pattern.
+  const cardioWeekCounts = new Map();
+  cardioAsc.forEach((s) => {
+    const wk = isoDate(getWeekStart(new Date(s.date)));
+    cardioWeekCounts.set(wk, (cardioWeekCounts.get(wk) || 0) + 1);
+  });
+  const cardioWeekKeys = [...cardioWeekCounts.keys()].sort();
+
   container.appendChild(el(`
     <div class="screen">
       <h1 class="screen-title">Progress</h1>
@@ -125,6 +67,16 @@ export async function renderProgress(container) {
           <div class="chart-wrap"><h4>Estimated 1RM (lbs, Epley)</h4><canvas id="chart-1rm" height="220"></canvas></div>
           <div class="chart-wrap"><h4>Total Volume (lbs)</h4><canvas id="chart-volume" height="220"></canvas></div>
         `}
+      </div>
+
+      <div class="section">
+        <div class="section-title">Zone 2 Cardio</div>
+        ${cardioAsc.length === 0 ? '<div class="empty-state">Log some cardio to see trends here.</div>' : `
+          <div class="chart-wrap"><h4>Minutes</h4><canvas id="chart-cardio-minutes" height="220"></canvas></div>
+          <div class="chart-wrap"><h4>Incline (%)</h4><canvas id="chart-cardio-incline" height="220"></canvas></div>
+          <div class="chart-wrap"><h4>Distance (mi)</h4><canvas id="chart-cardio-distance" height="220"></canvas></div>
+        `}
+        ${cardioWeekKeys.length === 0 ? '' : '<div class="chart-wrap"><h4>Cardio sessions per week</h4><canvas id="chart-cardio-freq" height="220"></canvas></div>'}
       </div>
 
       <div class="section">
@@ -159,7 +111,7 @@ export async function renderProgress(container) {
     container.querySelectorAll('.chart-wrap canvas').forEach((c) => {
       c.replaceWith(el('<p class="text-dim text-sm">Charts need a network connection the first time they load.</p>'));
     });
-    return destroyCharts;
+    return charts.destroyAll;
   }
 
   function renderExerciseCharts(exerciseId) {
@@ -175,36 +127,49 @@ export async function renderProgress(container) {
       .filter(Boolean);
 
     const labels = points.map((p) => formatDate(p.date));
-    lineChart(Chart, container.querySelector('#chart-weight'), labels, points.map((p) => round1(p.topWeight)), CHART_COLORS.accent, 'lbs');
-    lineChart(Chart, container.querySelector('#chart-1rm'), labels, points.map((p) => round1(p.best1rm)), CHART_COLORS.accent2, 'lbs');
-    barChart(Chart, container.querySelector('#chart-volume'), labels, points.map((p) => round1(p.volume)), CHART_COLORS.accent, 'lbs');
+    charts.register(lineChart(Chart, container.querySelector('#chart-weight'), labels, points.map((p) => round1(p.topWeight)), CHART_COLORS.accent, 'lbs'));
+    charts.register(lineChart(Chart, container.querySelector('#chart-1rm'), labels, points.map((p) => round1(p.best1rm)), CHART_COLORS.accent2, 'lbs'));
+    charts.register(barChart(Chart, container.querySelector('#chart-volume'), labels, points.map((p) => round1(p.volume)), CHART_COLORS.accent, 'lbs'));
   }
 
   if (loggedExercises.length) {
     const select = container.querySelector('#exercise-select');
     renderExerciseCharts(select.value);
     select.addEventListener('change', () => {
-      // Only destroy/recreate the three per-exercise charts, not all charts.
-      chartInstances = chartInstances.filter((c) => {
-        const isPerExercise = ['chart-weight', 'chart-1rm', 'chart-volume'].includes(c.canvas.id);
-        if (isPerExercise) c.destroy();
-        return !isPerExercise;
-      });
+      charts.destroyById(['chart-weight', 'chart-1rm', 'chart-volume']);
       renderExerciseCharts(select.value);
     });
+  }
+
+  if (cardioAsc.length) {
+    const labels = cardioAsc.map((c) => formatDate(c.date));
+    charts.register(lineChart(Chart, container.querySelector('#chart-cardio-minutes'), labels, cardioAsc.map((c) => c.minutes ?? null), CHART_COLORS.accent, 'min'));
+    charts.register(lineChart(Chart, container.querySelector('#chart-cardio-incline'), labels, cardioAsc.map((c) => c.incline ?? null), CHART_COLORS.accent2, '%'));
+    charts.register(lineChart(Chart, container.querySelector('#chart-cardio-distance'), labels, cardioAsc.map((c) => c.distance ?? null), CHART_COLORS.accent3, 'mi'));
   }
 
   if (bodyMetrics.length) {
     const bmAsc = [...bodyMetrics].sort((a, b) => new Date(a.date) - new Date(b.date));
     const labels = bmAsc.map((b) => formatDate(b.date));
-    lineChart(Chart, container.querySelector('#chart-bw'), labels, bmAsc.map((b) => b.weight ?? null), CHART_COLORS.accent, 'lbs');
-    lineChart(Chart, container.querySelector('#chart-bf'), labels, bmAsc.map((b) => b.bodyFatPercentage ?? null), CHART_COLORS.accent2, '%');
+    const weightGoal = settings.targetWeight != null
+      ? [goalDataset(settings.targetWeight, labels.length, CHART_COLORS.goal, 'Goal')] : [];
+    const bodyFatGoal = settings.targetBodyFat != null
+      ? [goalDataset(settings.targetBodyFat, labels.length, CHART_COLORS.goal, 'Goal')] : [];
+    charts.register(lineChart(Chart, container.querySelector('#chart-bw'), labels, bmAsc.map((b) => b.weight ?? null), CHART_COLORS.accent, 'lbs', { extraDatasets: weightGoal }));
+    charts.register(lineChart(Chart, container.querySelector('#chart-bf'), labels, bmAsc.map((b) => b.bodyFatPercentage ?? null), CHART_COLORS.accent2, '%', { extraDatasets: bodyFatGoal }));
   }
 
   if (weekKeys.length) {
     const labels = weekKeys.map((wk) => formatDate(wk));
-    barChart(Chart, container.querySelector('#chart-freq'), labels, weekKeys.map((wk) => weekCounts.get(wk)), CHART_COLORS.accent, 'workouts');
+    const goal = [goalDataset(settings.weeklyWorkoutGoal, labels.length, CHART_COLORS.goal, 'Goal')];
+    charts.register(barChart(Chart, container.querySelector('#chart-freq'), labels, weekKeys.map((wk) => weekCounts.get(wk)), CHART_COLORS.accent, 'workouts', { extraDatasets: goal }));
   }
 
-  return destroyCharts;
+  if (cardioWeekKeys.length) {
+    const labels = cardioWeekKeys.map((wk) => formatDate(wk));
+    const goal = [goalDataset(settings.cardioWeeklyGoal, labels.length, CHART_COLORS.goal, 'Goal')];
+    charts.register(barChart(Chart, container.querySelector('#chart-cardio-freq'), labels, cardioWeekKeys.map((wk) => cardioWeekCounts.get(wk)), CHART_COLORS.accent3, 'sessions', { extraDatasets: goal }));
+  }
+
+  return charts.destroyAll;
 }

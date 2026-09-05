@@ -42,15 +42,34 @@ export async function renderHome(container) {
   container.appendChild(el(`
     <div class="screen">
       <div class="hero">
-        <div class="hero-number">${settings.streakCount || 0}</div>
+        <div class="hero-number">${settings.overallStreakCount || 0}</div>
         <div class="hero-label">week streak</div>
       </div>
 
+      <div class="grid-2 mt-8">
+        <div class="big-stat">
+          <div class="num">${settings.streakCount || 0}</div>
+          <div class="lbl">workout streak</div>
+        </div>
+        <div class="big-stat">
+          <div class="num">${settings.cardioStreakCount || 0}</div>
+          <div class="lbl">cardio streak</div>
+        </div>
+      </div>
+
       <div class="home-stack">
-        <div class="card">
-          <div class="big-stat" style="padding:6px 8px;">
-            <div class="num">${weekStatus.count}/${weekStatus.goal}</div>
-            <div class="lbl">workouts this week ${weekStatus.onTrack ? '· on track' : ''}</div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="big-stat" style="padding:6px 8px;">
+              <div class="num">${weekStatus.workout.count}/${weekStatus.workout.goal}</div>
+              <div class="lbl">workouts this week ${weekStatus.workout.onTrack ? '· on track' : ''}</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="big-stat" style="padding:6px 8px;">
+              <div class="num">${weekStatus.cardio.count}/${weekStatus.cardio.goal}</div>
+              <div class="lbl">zone 2 cardio this week ${weekStatus.cardio.onTrack ? '· on track' : ''}</div>
+            </div>
           </div>
         </div>
 
