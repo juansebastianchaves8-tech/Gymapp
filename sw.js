@@ -3,9 +3,9 @@
 // Bump CACHE_VERSION on every deploy that changes any cached file (mirror
 // APP_VERSION in js/config.js so the two stay in sync). That's what makes
 // the next `install` see stale content, download fresh files into a new
-// cache, and surface the "Update available" banner (wired in js/app.js)
-// instead of silently serving old code forever.
-const CACHE_VERSION = 'v2';
+// cache, and surface as an update available in the More screen (wired in
+// js/app.js + js/swUpdate.js) instead of silently serving old code forever.
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `gymapp-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -21,6 +21,7 @@ const PRECACHE_URLS = [
   './js/router.js',
   './js/drive.js',
   './js/sync.js',
+  './js/swUpdate.js',
   './js/app.js',
   './js/components/modal.js',
   './js/components/toast.js',
