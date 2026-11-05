@@ -1,5 +1,5 @@
 import { getBodyMetrics, saveBodyMetric, deleteBodyMetric, getSettings } from '../db.js';
-import { el, uid, isoDate, formatDate } from '../util.js';
+import { el, getWeekStart, isoDate, parseLocalDate, formatWeekLabel } from '../util.js';
 import { showToast } from '../components/toast.js';
 import { triggerSync } from '../sync.js';
 import { loadChartJs, CHART_COLORS, lineChart, goalDataset, createChartManager } from '../charts.js';
@@ -11,94 +11,103 @@ const charts = createChartManager();
 export async function renderBodyMetrics(container) {
   charts.destroyAll();
   const [entries, settings] = await Promise.all([getBodyMetrics(), getSettings()]);
-  let editingId = null;
+  const currentWeekISO = isoDate(getWeekStart());
+  let editingWeek = currentWeekISO;
 
   container.appendChild(el(`
     <div class="screen">
       <h1 class="screen-title">Body Metrics</h1>
 
       <div class="card" id="entry-form">
-        <h3 id="form-title">Log Entry</h3>
+        <div class="row-between">
+          <h3 id="form-week-label">Week of ${formatWeekLabel(currentWeekISO)}</h3>
+          <button type="button" id="reset-week-btn" class="btn btn-ghost btn-sm" hidden>This Week</button>
+        </div>
         <div class="field">
-          <label>Date</label>
+          <label>Date (any day in the week)</label>
           <input type="date" id="f-date" value="${isoDate(new Date())}" />
         </div>
         <div class="field-row">
           <div class="field">
-            <label>Weight (lbs)</label>
+            <label>Avg Weight (lbs)</label>
             <input type="number" min="0" step="0.1" id="f-weight" inputmode="decimal" />
           </div>
           <div class="field">
-            <label>Body Fat % (optional)</label>
+            <label>Avg Body Fat % (optional)</label>
             <input type="number" min="0" max="100" step="0.1" id="f-bf" inputmode="decimal" />
           </div>
         </div>
-        <div style="display:flex; gap:10px;">
-          <button type="button" id="save-btn" class="btn btn-primary btn-block">Save Entry</button>
-          <button type="button" id="cancel-btn" class="btn btn-secondary" hidden>Cancel</button>
-        </div>
+        <button type="button" id="save-btn" class="btn btn-primary btn-block">Save Week</button>
       </div>
 
       <div class="section mt-16">
         <div class="section-title">Trends</div>
-        ${entries.length === 0 ? '<div class="empty-state">Log an entry to start seeing trends.</div>' : `
-          <div class="chart-wrap"><h4>Body Weight (lbs)</h4><canvas id="chart-weight" height="200"></canvas></div>
-          <div class="chart-wrap"><h4>Body Fat %</h4><canvas id="chart-bf" height="200"></canvas></div>
+        ${entries.length === 0 ? '<div class="empty-state">Log a week to start seeing trends.</div>' : `
+          <div class="chart-wrap"><h4>Avg Body Weight (lbs)</h4><canvas id="chart-weight" height="200"></canvas></div>
+          <div class="chart-wrap"><h4>Avg Body Fat %</h4><canvas id="chart-bf" height="200"></canvas></div>
         `}
       </div>
 
       <div class="section">
-        <div class="section-title">Entries</div>
+        <div class="section-title">Weekly Summary</div>
         ${entries.length === 0 ? '<div class="empty-state">No entries yet.</div>' : '<ul class="list" id="entry-list"></ul>'}
       </div>
     </div>
   `));
 
   const els = {
-    title: container.querySelector('#form-title'),
+    label: container.querySelector('#form-week-label'),
+    reset: container.querySelector('#reset-week-btn'),
     date: container.querySelector('#f-date'),
     weight: container.querySelector('#f-weight'),
     bf: container.querySelector('#f-bf'),
-    cancel: container.querySelector('#cancel-btn'),
   };
 
-  function resetForm() {
-    editingId = null;
-    els.title.textContent = 'Log Entry';
+  function loadWeekIntoForm(weekISO) {
+    const previousHadEntry = entries.some((e) => e.weekStartDate === editingWeek);
+    editingWeek = weekISO;
+    els.label.textContent = `Week of ${formatWeekLabel(weekISO)}`;
+    els.reset.hidden = weekISO === currentWeekISO;
+    const existing = entries.find((e) => e.weekStartDate === weekISO);
+    // Moving between weeks with nothing saved keeps numbers already typed, so
+    // the date can be picked after filling in the form.
+    if (existing || previousHadEntry) {
+      els.weight.value = existing ? existing.weight ?? '' : '';
+      els.bf.value = existing ? existing.bodyFatPercentage ?? '' : '';
+    }
+  }
+  loadWeekIntoForm(currentWeekISO);
+
+  els.reset.addEventListener('click', () => {
     els.date.value = isoDate(new Date());
-    els.weight.value = '';
-    els.bf.value = '';
-    els.cancel.hidden = true;
-  }
+    loadWeekIntoForm(currentWeekISO);
+  });
 
-  function loadIntoForm(entry) {
-    editingId = entry.id;
-    els.title.textContent = 'Edit Entry';
-    els.date.value = isoDate(new Date(entry.date));
-    els.weight.value = entry.weight ?? '';
-    els.bf.value = entry.bodyFatPercentage ?? '';
-    els.cancel.hidden = false;
-  }
-
-  els.cancel.addEventListener('click', resetForm);
+  els.date.addEventListener('change', () => {
+    // A cleared date input has no week to log against; restore the current one.
+    if (!els.date.value) {
+      els.date.value = editingWeek;
+      return;
+    }
+    const weekISO = isoDate(getWeekStart(parseLocalDate(els.date.value)));
+    if (weekISO !== editingWeek) loadWeekIntoForm(weekISO);
+  });
 
   function reRender() { container.innerHTML = ''; renderBodyMetrics(container); }
 
   container.querySelector('#save-btn').addEventListener('click', async () => {
     const weight = els.weight.value ? Number(els.weight.value) : null;
-    if (!els.date.value || weight === null) {
-      showToast('Date and weight are required');
+    if (weight === null) {
+      showToast('Weight is required');
       return;
     }
     const bf = els.bf.value ? Number(els.bf.value) : null;
-    await saveBodyMetric({
-      id: editingId || uid(),
-      date: new Date(els.date.value).toISOString(),
-      weight,
-      bodyFatPercentage: bf,
-    });
+    const entry = { weekStartDate: editingWeek, weight, bodyFatPercentage: bf };
+    const existing = entries.find((e) => e.weekStartDate === editingWeek);
+    if (existing) entry.id = existing.id;
+    await saveBodyMetric(entry);
     triggerSync();
-    showToast('Entry saved');
+    showToast('Week saved');
     reRender();
   });
 
@@ -108,7 +117,7 @@ export async function renderBodyMetrics(container) {
       const row = el(`
         <li class="list-item">
           <div class="list-item-main">
-            <div class="list-item-title">${formatDate(e.date, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            <div class="list-item-title">${formatWeekLabel(e.weekStartDate)}</div>
             <div class="list-item-sub">${e.weight} lbs${e.bodyFatPercentage != null ? ` · ${e.bodyFatPercentage}% BF` : ''}</div>
           </div>
           <div class="list-item-actions">
@@ -118,11 +127,12 @@ export async function renderBodyMetrics(container) {
         </li>
       `);
       row.querySelector('.edit-btn').addEventListener('click', () => {
-        loadIntoForm(e);
+        els.date.value = e.weekStartDate;
+        loadWeekIntoForm(e.weekStartDate);
         window.scrollTo(0, 0);
       });
       row.querySelector('.delete-btn').addEventListener('click', async () => {
-        if (!confirm('Delete this entry?')) return;
+        if (!confirm('Delete this week\'s entry?')) return;
         await deleteBodyMetric(e.id);
         triggerSync();
         showToast('Deleted');
@@ -135,8 +145,8 @@ export async function renderBodyMetrics(container) {
   if (entries.length) {
     try {
       const Chart = await loadChartJs();
-      const asc = [...entries].sort((a, b) => new Date(a.date) - new Date(b.date));
-      const labels = asc.map((e) => formatDate(e.date));
+      const asc = [...entries].sort((a, b) => new Date(a.weekStartDate) - new Date(b.weekStartDate));
+      const labels = asc.map((e) => formatWeekLabel(e.weekStartDate).split(' - ')[0]);
 
       const weightGoal = settings.targetWeight != null
         ? [goalDataset(settings.targetWeight, labels.length, CHART_COLORS.goal, 'Target')] : [];

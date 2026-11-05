@@ -39,8 +39,14 @@ export function formatDate(dateStrOrDate, opts = { month: 'short', day: 'numeric
   return d.toLocaleDateString(undefined, opts);
 }
 
+// Parses a YYYY-MM-DD string as local midnight. `new Date('YYYY-MM-DD')` parses
+// as UTC, which lands on the previous day in timezones behind UTC.
+export function parseLocalDate(iso) {
+  return new Date(`${iso}T00:00:00`);
+}
+
 export function formatWeekLabel(weekStartDate) {
-  const start = new Date(weekStartDate);
+  const start = parseLocalDate(weekStartDate);
   const end = addDays(start, 6);
   return `${formatDate(start)} - ${formatDate(end)}`;
 }

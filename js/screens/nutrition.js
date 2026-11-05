@@ -1,5 +1,5 @@
 import { getNutritionEntries, saveNutritionEntry, deleteNutritionEntry, getSettings } from '../db.js';
-import { el, getWeekStart, isoDate, formatWeekLabel } from '../util.js';
+import { el, getWeekStart, isoDate, parseLocalDate, formatWeekLabel } from '../util.js';
 import { showToast } from '../components/toast.js';
 import { triggerSync } from '../sync.js';
 import { loadChartJs, CHART_COLORS, lineChart, goalDataset, createChartManager } from '../charts.js';
@@ -25,6 +25,10 @@ export async function renderNutrition(container) {
         <div class="row-between">
           <h3 id="form-week-label">Week of ${formatWeekLabel(currentWeekISO)}</h3>
           <button type="button" id="reset-week-btn" class="btn btn-ghost btn-sm" hidden>This Week</button>
+        </div>
+        <div class="field">
+          <label>Date (any day in the week)</label>
+          <input type="date" id="f-date" value="${isoDate(new Date())}" />
         </div>
         <div class="field-row">
           <div class="field">
@@ -67,6 +71,7 @@ export async function renderNutrition(container) {
   const els = {
     label: container.querySelector('#form-week-label'),
     reset: container.querySelector('#reset-week-btn'),
+    date: container.querySelector('#f-date'),
     calories: container.querySelector('#f-calories'),
     protein: container.querySelector('#f-protein'),
     carbs: container.querySelector('#f-carbs'),
@@ -74,18 +79,36 @@ export async function renderNutrition(container) {
   };
 
   function loadWeekIntoForm(weekISO) {
+    const previousHadEntry = entries.some((e) => e.weekStartDate === editingWeek);
     editingWeek = weekISO;
     els.label.textContent = `Week of ${formatWeekLabel(weekISO)}`;
     els.reset.hidden = weekISO === currentWeekISO;
     const existing = entries.find((e) => e.weekStartDate === weekISO);
-    els.calories.value = existing ? existing.avgCalories ?? '' : '';
-    els.protein.value = existing ? existing.avgProtein ?? '' : '';
-    els.carbs.value = existing ? existing.avgCarbs ?? '' : '';
-    els.fat.value = existing ? existing.avgFat ?? '' : '';
+    // Moving between weeks with nothing saved keeps numbers already typed, so
+    // the date can be picked after filling in the form.
+    if (existing || previousHadEntry) {
+      els.calories.value = existing ? existing.avgCalories ?? '' : '';
+      els.protein.value = existing ? existing.avgProtein ?? '' : '';
+      els.carbs.value = existing ? existing.avgCarbs ?? '' : '';
+      els.fat.value = existing ? existing.avgFat ?? '' : '';
+    }
   }
   loadWeekIntoForm(currentWeekISO);
 
-  els.reset.addEventListener('click', () => loadWeekIntoForm(currentWeekISO));
+  els.reset.addEventListener('click', () => {
+    els.date.value = isoDate(new Date());
+    loadWeekIntoForm(currentWeekISO);
+  });
+
+  els.date.addEventListener('change', () => {
+    // A cleared date input has no week to log against; restore the current one.
+    if (!els.date.value) {
+      els.date.value = editingWeek;
+      return;
+    }
+    const weekISO = isoDate(getWeekStart(parseLocalDate(els.date.value)));
+    if (weekISO !== editingWeek) loadWeekIntoForm(weekISO);
+  });
 
   function reRender() {
     container.innerHTML = '';
@@ -124,6 +147,7 @@ export async function renderNutrition(container) {
         </li>
       `);
       row.querySelector('.edit-btn').addEventListener('click', () => {
+        els.date.value = e.weekStartDate;
         loadWeekIntoForm(e.weekStartDate);
         window.scrollTo(0, 0);
       });

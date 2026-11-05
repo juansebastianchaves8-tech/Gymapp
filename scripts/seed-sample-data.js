@@ -105,12 +105,9 @@ export async function seed() {
 
   // ---- Body metrics: weekly weigh-ins, gentle downward trend ----
   for (let w = WEEKS - 1; w >= 0; w--) {
-    const date = addDays(currentWeekStart, -7 * w + 1);
-    if (date > today) continue;
     const weekIndex = WEEKS - 1 - w;
     await db.saveBodyMetric({
-      id: uid(),
-      date: date.toISOString(),
+      weekStartDate: isoDate(addDays(currentWeekStart, -7 * w)),
       weight: Math.round((186 - weekIndex * 0.6) * 10) / 10,
       bodyFatPercentage: Math.round((19 - weekIndex * 0.3) * 10) / 10,
     });

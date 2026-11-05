@@ -2,7 +2,7 @@
 // CDN as an ES module, no bundler needed). This is the single source of
 // truth for reads/writes while using the app.
 import { openDB } from 'https://cdn.jsdelivr.net/npm/idb@8/+esm';
-import { uid, getWeekStart, isoDate } from './util.js';
+import { uid, getWeekStart, isoDate, parseLocalDate, round1 } from './util.js';
 import { DEFAULT_EXERCISES } from './exercises-seed.js';
 
 const DB_NAME = 'gymapp';
@@ -55,6 +55,17 @@ export function getDB() {
 // if this is a fresh install.
 export async function ensureSeeded() {
   const db = await getDB();
+
+  // Checked on every load rather than in a DB version upgrade, so a failed
+  // migration leaves the old entries intact and simply retries next time.
+  const bodyTx = db.transaction('bodyMetrics', 'readwrite');
+  const bodyEntries = await bodyTx.store.getAll();
+  if (bodyEntries.some((e) => !e.weekStartDate)) {
+    const migrated = migrateBodyMetrics(bodyEntries);
+    await bodyTx.store.clear();
+    for (const entry of migrated) await bodyTx.store.put(entry);
+  }
+  await bodyTx.done;
 
   const exCount = await db.count('exercises');
   if (exCount === 0) {
@@ -198,13 +209,48 @@ export async function deleteSleepEntry(id) {
   return remove('sleepEntries', id);
 }
 
-// ---- Body metrics ----
+// ---- Body metrics (one per Mon-Sun week) ----
+function averageOf(values) {
+  const present = values.filter((v) => v != null);
+  if (!present.length) return null;
+  return round1(present.reduce((sum, v) => sum + v, 0) / present.length);
+}
+
+// Body metrics used to be logged per day as { id, date, weight,
+// bodyFatPercentage }. This collapses those into one averaged entry per week,
+// keeping the originals on `originalEntries` because averaging can't be undone.
+// `date` was saved as UTC midnight of the chosen day, so its first 10
+// characters are that day in any timezone. Weekly entries pass through as is.
+export function migrateBodyMetrics(entries) {
+  const byWeek = new Map(entries.filter((e) => e.weekStartDate).map((e) => [e.weekStartDate, e]));
+  const legacyByWeek = new Map();
+  for (const entry of entries) {
+    if (entry.weekStartDate) continue;
+    const week = isoDate(getWeekStart(parseLocalDate(entry.date.slice(0, 10))));
+    legacyByWeek.set(week, [...(legacyByWeek.get(week) || []), entry]);
+  }
+  for (const [week, group] of legacyByWeek) {
+    if (byWeek.has(week)) continue;
+    const newestFirst = [...group].sort((a, b) => new Date(b.date) - new Date(a.date));
+    byWeek.set(week, {
+      id: newestFirst[0].id,
+      weekStartDate: week,
+      weight: averageOf(group.map((e) => e.weight)),
+      bodyFatPercentage: averageOf(group.map((e) => e.bodyFatPercentage)),
+      originalEntries: group,
+    });
+  }
+  return [...byWeek.values()];
+}
+
 export async function getBodyMetrics() {
   const all = await getAll('bodyMetrics');
-  return all.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return all.sort((a, b) => new Date(b.weekStartDate) - new Date(a.weekStartDate));
 }
 export async function saveBodyMetric(entry) {
-  const toSave = entry.id ? entry : { ...entry, id: uid() };
+  const all = await getAll('bodyMetrics');
+  const existing = all.find((e) => e.weekStartDate === entry.weekStartDate && e.id !== entry.id);
+  const toSave = { ...entry, id: entry.id || existing?.id || uid() };
   await put('bodyMetrics', toSave);
   return toSave;
 }
@@ -255,7 +301,9 @@ export async function importFullState(state) {
   const tx = db.transaction(stores, 'readwrite');
   for (const name of ['exercises', 'routines', 'workoutSessions', 'nutritionEntries', 'sleepEntries', 'bodyMetrics', 'cardioSessions']) {
     await tx.objectStore(name).clear();
-    for (const item of state[name] || []) {
+    // Snapshots saved before weekly body metrics still hold per-day entries.
+    const items = name === 'bodyMetrics' ? migrateBodyMetrics(state[name] || []) : state[name] || [];
+    for (const item of items) {
       await tx.objectStore(name).put(item);
     }
   }

@@ -1,5 +1,5 @@
 import { getWorkoutSessions, getExercises, getBodyMetrics, getCardioSessions, getSettings } from '../db.js';
-import { el, epley1RM, round1, getWeekStart, isoDate, formatDate, escapeHtml } from '../util.js';
+import { el, epley1RM, round1, getWeekStart, isoDate, formatDate, formatWeekLabel, escapeHtml } from '../util.js';
 import { loadChartJs, CHART_COLORS, lineChart, barChart, goalDataset, createChartManager } from '../charts.js';
 
 export async function renderProgress(container) {
@@ -82,8 +82,8 @@ export async function renderProgress(container) {
       <div class="section">
         <div class="section-title">Body Metrics</div>
         ${bodyMetrics.length === 0 ? '<div class="empty-state">No body metric entries yet.</div>' : `
-          <div class="chart-wrap"><h4>Body Weight (lbs)</h4><canvas id="chart-bw" height="220"></canvas></div>
-          <div class="chart-wrap"><h4>Body Fat %</h4><canvas id="chart-bf" height="220"></canvas></div>
+          <div class="chart-wrap"><h4>Avg Body Weight (lbs)</h4><canvas id="chart-bw" height="220"></canvas></div>
+          <div class="chart-wrap"><h4>Avg Body Fat %</h4><canvas id="chart-bf" height="220"></canvas></div>
         `}
       </div>
 
@@ -149,8 +149,8 @@ export async function renderProgress(container) {
   }
 
   if (bodyMetrics.length) {
-    const bmAsc = [...bodyMetrics].sort((a, b) => new Date(a.date) - new Date(b.date));
-    const labels = bmAsc.map((b) => formatDate(b.date));
+    const bmAsc = [...bodyMetrics].sort((a, b) => new Date(a.weekStartDate) - new Date(b.weekStartDate));
+    const labels = bmAsc.map((b) => formatWeekLabel(b.weekStartDate).split(' - ')[0]);
     const weightGoal = settings.targetWeight != null
       ? [goalDataset(settings.targetWeight, labels.length, CHART_COLORS.goal, 'Goal')] : [];
     const bodyFatGoal = settings.targetBodyFat != null
