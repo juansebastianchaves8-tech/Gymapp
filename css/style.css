@@ -226,6 +226,9 @@ a { color: var(--accent); text-decoration: none; }
 .field-row { display: flex; gap: 10px; }
 .field-row .field { flex: 1; }
 .hint { font-size: 0.75rem; color: var(--text-faint); margin-top: 4px; }
+.range-inputs { display: flex; align-items: center; gap: 6px; }
+.range-inputs input { flex: 1 1 0; padding-left: 8px; padding-right: 8px; text-align: center; }
+.range-sep { color: var(--text-faint); }
 
 /* ---------- Workout logging ---------- */
 .exercise-block {

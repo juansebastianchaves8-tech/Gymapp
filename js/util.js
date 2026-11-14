@@ -51,6 +51,13 @@ export function dayToTimestamp(iso) {
   return new Date(`${iso}T12:00:00`).toISOString();
 }
 
+// Routine targets are a number or a range: `min` alone, or `min` to `max`.
+// Returns null when there's no target.
+export function formatRange(min, max) {
+  if (!min) return null;
+  return max ? `${min}–${max}` : String(min);
+}
+
 export function formatWeekLabel(weekStartDate) {
   const start = parseLocalDate(weekStartDate);
   const end = addDays(start, 6);

@@ -2,7 +2,7 @@ import {
   getExercises, getRoutines, getWorkoutSessions, saveWorkoutSession, deleteWorkoutSession,
   getCardioSessions, saveCardioSession, deleteCardioSession,
 } from '../db.js';
-import { el, uid, isoDate, dayToTimestamp, formatDate, escapeHtml } from '../util.js';
+import { el, uid, isoDate, dayToTimestamp, formatDate, formatRange, escapeHtml } from '../util.js';
 import { navigate } from '../router.js';
 import { pickExercise } from '../components/exercisePicker.js';
 import { pickRoutine } from '../components/routinePicker.js';
@@ -57,7 +57,9 @@ async function renderStrengthWorkout(container, params, tabsActive) {
         exerciseId: se.exerciseId,
         name: ex ? ex.name : 'Unknown exercise',
         targetSets: null,
+        targetSetsMax: null,
         targetReps: null,
+        targetRepsMax: null,
         sets: se.sets.map((s) => ({ weight: String(s.weight), reps: String(s.reps) })),
       });
     }
@@ -69,7 +71,9 @@ async function renderStrengthWorkout(container, params, tabsActive) {
         exerciseId: re.exerciseId,
         name: ex ? ex.name : 'Unknown exercise',
         targetSets: re.targetSets || null,
+        targetSetsMax: re.targetSetsMax || null,
         targetReps: re.targetReps || null,
+        targetRepsMax: re.targetRepsMax || null,
         sets: [{ weight: '', reps: '' }],
       });
     }
@@ -121,7 +125,7 @@ async function renderStrengthWorkout(container, params, tabsActive) {
 
   function renderExerciseBlock(de) {
     const target = de.targetSets || de.targetReps
-      ? `<div class="hint">Target: ${de.targetSets || '?'} x ${de.targetReps || '?'}</div>`
+      ? `<div class="hint">Target: ${formatRange(de.targetSets, de.targetSetsMax) ?? '?'} x ${formatRange(de.targetReps, de.targetRepsMax) ?? '?'}</div>`
       : '';
     const block = el(`
       <div class="exercise-block" data-key="${de.key}">
@@ -186,7 +190,9 @@ async function renderStrengthWorkout(container, params, tabsActive) {
       exerciseId: chosen.id,
       name: chosen.name,
       targetSets: null,
+      targetSetsMax: null,
       targetReps: null,
+      targetRepsMax: null,
       sets: [{ weight: '', reps: '' }],
     });
     renderList();
@@ -207,7 +213,9 @@ async function renderStrengthWorkout(container, params, tabsActive) {
         exerciseId: re.exerciseId,
         name: ex ? ex.name : 'Unknown exercise',
         targetSets: re.targetSets || null,
+        targetSetsMax: re.targetSetsMax || null,
         targetReps: re.targetReps || null,
+        targetRepsMax: re.targetRepsMax || null,
         sets: [{ weight: '', reps: '' }],
       });
       added++;

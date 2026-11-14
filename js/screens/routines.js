@@ -44,6 +44,16 @@ export async function renderRoutines(container) {
   }
 }
 
+// A target is stored as `min` alone, or `min` plus a larger `max` for a range,
+// so routines saved before ranges existed still read correctly. Accepts the
+// two boxes in any order or with only one filled in.
+function normalizeRange(a, b) {
+  const values = [a, b].filter((v) => v > 0).sort((x, y) => x - y);
+  if (values.length === 0) return [null, null];
+  const [min, max] = [values[0], values[values.length - 1]];
+  return [min, max > min ? max : null];
+}
+
 export async function renderRoutineEditor(container, params) {
   const isEdit = Boolean(params.id);
   const exercises = await getExercises();
@@ -96,11 +106,19 @@ export async function renderRoutineEditor(container, params) {
           <div class="field-row">
             <div class="field">
               <label>Target sets (optional)</label>
-              <input type="number" min="0" class="target-sets" value="${re.targetSets ?? ''}" />
+              <div class="range-inputs">
+                <input type="number" min="1" inputmode="numeric" data-key="targetSets" placeholder="from" value="${re.targetSets ?? ''}" />
+                <span class="range-sep">–</span>
+                <input type="number" min="1" inputmode="numeric" data-key="targetSetsMax" placeholder="to" value="${re.targetSetsMax ?? ''}" />
+              </div>
             </div>
             <div class="field">
               <label>Target reps (optional)</label>
-              <input type="number" min="0" class="target-reps" value="${re.targetReps ?? ''}" />
+              <div class="range-inputs">
+                <input type="number" min="1" inputmode="numeric" data-key="targetReps" placeholder="from" value="${re.targetReps ?? ''}" />
+                <span class="range-sep">–</span>
+                <input type="number" min="1" inputmode="numeric" data-key="targetRepsMax" placeholder="to" value="${re.targetRepsMax ?? ''}" />
+              </div>
             </div>
           </div>
         </div>
@@ -109,11 +127,10 @@ export async function renderRoutineEditor(container, params) {
         routine.exercises.splice(idx, 1);
         renderExList();
       });
-      row.querySelector('.target-sets').addEventListener('input', (e) => {
-        re.targetSets = e.target.value ? parseInt(e.target.value, 10) : null;
-      });
-      row.querySelector('.target-reps').addEventListener('input', (e) => {
-        re.targetReps = e.target.value ? parseInt(e.target.value, 10) : null;
+      row.querySelectorAll('.range-inputs input').forEach((input) => {
+        input.addEventListener('input', () => {
+          re[input.dataset.key] = input.value ? parseInt(input.value, 10) : null;
+        });
       });
       listEl.appendChild(row);
     });
@@ -127,7 +144,9 @@ export async function renderRoutineEditor(container, params) {
       showToast('Already in this routine');
       return;
     }
-    routine.exercises.push({ exerciseId: chosen.id, targetSets: null, targetReps: null });
+    routine.exercises.push({
+      exerciseId: chosen.id, targetSets: null, targetSetsMax: null, targetReps: null, targetRepsMax: null,
+    });
     renderExList();
   });
 
@@ -136,6 +155,10 @@ export async function renderRoutineEditor(container, params) {
     if (!name) { showToast('Give the routine a name'); return; }
     if (routine.exercises.length === 0) { showToast('Add at least one exercise'); return; }
     routine.name = name;
+    routine.exercises.forEach((re) => {
+      [re.targetSets, re.targetSetsMax] = normalizeRange(re.targetSets, re.targetSetsMax);
+      [re.targetReps, re.targetRepsMax] = normalizeRange(re.targetReps, re.targetRepsMax);
+    });
     await saveRoutine(routine);
     triggerSync();
     showToast('Routine saved');

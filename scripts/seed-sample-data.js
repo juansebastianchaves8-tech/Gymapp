@@ -35,7 +35,7 @@ export async function seed() {
       { exerciseId: bench.id, targetSets: 4, targetReps: 8 },
       { exerciseId: incline.id, targetSets: 3, targetReps: 10 },
       { exerciseId: ohp.id, targetSets: 3, targetReps: 8 },
-      { exerciseId: tricep.id, targetSets: 3, targetReps: 12 },
+      { exerciseId: tricep.id, targetSets: 3, targetReps: 10, targetRepsMax: 12 },
     ],
   });
   const pullRoutine = await db.saveRoutine({
@@ -44,7 +44,7 @@ export async function seed() {
       { exerciseId: deadlift.id, targetSets: 3, targetReps: 5 },
       { exerciseId: row.id, targetSets: 4, targetReps: 8 },
       { exerciseId: pullup.id, targetSets: 3, targetReps: null },
-      { exerciseId: lat.id, targetSets: 3, targetReps: 10 },
+      { exerciseId: lat.id, targetSets: 3, targetSetsMax: 4, targetReps: 8, targetRepsMax: 12 },
       { exerciseId: curl.id, targetSets: 3, targetReps: 12 },
     ],
   });
