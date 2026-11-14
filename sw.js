@@ -5,7 +5,7 @@
 // the next `install` see stale content, download fresh files into a new
 // cache, and surface as an update available in the More screen (wired in
 // js/app.js + js/swUpdate.js) instead of silently serving old code forever.
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = `gymapp-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [

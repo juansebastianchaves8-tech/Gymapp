@@ -3,16 +3,45 @@
 // dark-theme styling, and goal-baseline-line support so all four screens
 // stay visually and behaviorally consistent.
 
+// Colors come from CSS variables in style.css, so charts follow the light or
+// dark theme. Read when each chart is created.
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
 export const CHART_COLORS = {
-  accent: '#00c88c',
-  accent2: '#4da6ff',
-  accent3: '#ffb84d',
-  grid: '#232d38',
-  text: '#8b98a5',
+  get accent() { return cssVar('--chart-1'); },
+  get accent2() { return cssVar('--chart-2'); },
+  get accent3() { return cssVar('--chart-3'); },
+  get grid() { return cssVar('--chart-grid'); },
+  get text() { return cssVar('--chart-text'); },
   // One consistent, distinct color for every goal/target baseline across
   // every chart in the app — deliberately not reused for any actual data
   // series, so a goal line never reads as ambiguous with real progress.
-  goal: '#c084fc',
+  get goal() { return cssVar('--chart-goal'); },
+};
+
+// Draws each goal dataset as a dashed line across the full plot width. Drawing
+// it as an ordinary line series fails in two cases: with a single data point
+// there's no segment to draw, and it only spans from the first point to the
+// last.
+const goalLinePlugin = {
+  id: 'goalLines',
+  afterDatasetsDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    chart.data.datasets.forEach((ds, i) => {
+      if (!ds.isGoal || !chart.isDatasetVisible(i)) return;
+      const y = scales.y.getPixelForValue(ds.goalValue);
+      if (y < chartArea.top || y > chartArea.bottom) return;
+      ctx.save();
+      ctx.strokeStyle = ds.borderColor;
+      ctx.lineWidth = ds.borderWidth;
+      ctx.setLineDash(ds.borderDash);
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+      ctx.restore();
+    });
+  },
 };
 
 let chartJsPromise = null;
@@ -22,7 +51,7 @@ export function loadChartJs() {
   if (!chartJsPromise) {
     chartJsPromise = import('https://cdn.jsdelivr.net/npm/chart.js@4/+esm').then((mod) => {
       const Chart = mod.Chart || mod.default;
-      Chart.register(...(mod.registerables || []));
+      Chart.register(...(mod.registerables || []), goalLinePlugin);
       window.Chart = Chart;
       return Chart;
     });
@@ -40,6 +69,9 @@ export function baseOptions(yLabel, { showLegend = false, yMin, yMax } = {}) {
       y: {
         grid: { color: CHART_COLORS.grid },
         ticks: { color: CHART_COLORS.text },
+        // Room above and below the data, so a goal just outside the data's
+        // range doesn't land on the edge of the plot where it can't be seen.
+        grace: '10%',
         min: yMin,
         max: yMax,
         title: yLabel ? { display: true, text: yLabel, color: CHART_COLORS.text } : undefined,
@@ -48,19 +80,22 @@ export function baseOptions(yLabel, { showLegend = false, yMin, yMax } = {}) {
   };
 }
 
-// A dashed, pointless reference-line dataset for showing a goal/target
-// value. `type: 'line'` makes this work when mixed into a bar chart too.
+// A goal/target reference line. The dataset itself draws nothing: it keeps the
+// goal in the legend and the y-axis range, and goalLinePlugin draws the line.
+// `type: 'line'` makes this work when mixed into a bar chart too.
 export function goalDataset(value, count, color = CHART_COLORS.goal, label = 'Target') {
   return {
     type: 'line',
     label,
+    isGoal: true,
+    goalValue: value,
     data: Array(count).fill(value),
     borderColor: color,
     borderDash: [6, 4],
     borderWidth: 2,
+    showLine: false,
     pointRadius: 0,
     fill: false,
-    tension: 0,
   };
 }
 

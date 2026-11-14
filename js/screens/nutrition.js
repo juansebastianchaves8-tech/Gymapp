@@ -195,7 +195,7 @@ export async function renderNutrition(container) {
               ...macroGoals,
             ],
           },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: CHART_COLORS.text } } }, scales: { x: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text } }, y: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text } } } },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: CHART_COLORS.text } } }, scales: { x: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text } }, y: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text }, grace: '10%' } } },
         });
         charts.register(chart);
       }
