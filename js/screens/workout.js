@@ -2,7 +2,7 @@ import {
   getExercises, getRoutines, getWorkoutSessions, saveWorkoutSession, deleteWorkoutSession,
   getCardioSessions, saveCardioSession, deleteCardioSession,
 } from '../db.js';
-import { el, uid, isoDate, formatDate, escapeHtml } from '../util.js';
+import { el, uid, isoDate, dayToTimestamp, formatDate, escapeHtml } from '../util.js';
 import { navigate } from '../router.js';
 import { pickExercise } from '../components/exercisePicker.js';
 import { pickRoutine } from '../components/routinePicker.js';
@@ -360,7 +360,7 @@ async function renderCardioLog(container) {
     }
     await saveCardioSession({
       id: editingId || uid(),
-      date: new Date(els.date.value).toISOString(),
+      date: dayToTimestamp(els.date.value),
       minutes,
       incline: els.incline.value ? Number(els.incline.value) : null,
       distance: els.distance.value ? Number(els.distance.value) : null,

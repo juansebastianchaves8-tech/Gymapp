@@ -45,6 +45,12 @@ export function parseLocalDate(iso) {
   return new Date(`${iso}T00:00:00`);
 }
 
+// Timestamp for a day picked in a date input. Noon local time keeps it on the
+// same calendar day even if it's later viewed from a different timezone.
+export function dayToTimestamp(iso) {
+  return new Date(`${iso}T12:00:00`).toISOString();
+}
+
 export function formatWeekLabel(weekStartDate) {
   const start = parseLocalDate(weekStartDate);
   const end = addDays(start, 6);

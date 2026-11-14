@@ -6,10 +6,10 @@
 // never affects any streak number until it closes (i.e. until a later app
 // load sees it's fully in the past).
 import { getSettings, updateSettings, getWorkoutSessions, getCardioSessions } from './db.js';
-import { getWeekStart, addDays, isoDate } from './util.js';
+import { getWeekStart, addDays, isoDate, parseLocalDate } from './util.js';
 
 function countInWeek(sessions, weekStartISO) {
-  const start = new Date(weekStartISO);
+  const start = parseLocalDate(weekStartISO);
   const end = addDays(start, 7);
   return sessions.filter((s) => {
     const d = new Date(s.date);
@@ -45,7 +45,7 @@ export async function reconcileStreak() {
     streakCount = workoutMet ? streakCount + 1 : 0;
     cardioStreakCount = cardioMet ? cardioStreakCount + 1 : 0;
     overallStreakCount = (workoutMet && cardioMet) ? overallStreakCount + 1 : 0;
-    lastStreakWeekChecked = isoDate(addDays(new Date(lastStreakWeekChecked), 7));
+    lastStreakWeekChecked = isoDate(addDays(parseLocalDate(lastStreakWeekChecked), 7));
   }
 
   settings = await updateSettings({
