@@ -4,8 +4,8 @@ const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
 
-const BG = [10, 15, 20]; // near-black background matching app dark theme
-const FG = [0, 200, 140]; // accent green
+const BG = [18, 18, 18]; // #121212, the app background
+const FG = [224, 11, 15]; // primary red #e00b0f dumbbell
 
 function crc32(buf) {
   let c;
