@@ -8,6 +8,7 @@ import { pickExercise } from '../components/exercisePicker.js';
 import { pickRoutine } from '../components/routinePicker.js';
 import { triggerSync } from '../sync.js';
 import { showToast } from '../components/toast.js';
+import { bestSetsByExercise, lastSetsByExercise, suggestWeight } from '../progression.js';
 
 function tabsBar(active) {
   return `
@@ -30,12 +31,34 @@ export async function renderWorkout(container, params) {
 }
 
 async function renderStrengthWorkout(container, params, tabsActive) {
-  const exercises = await getExercises();
+  const [exercises, sessions] = await Promise.all([getExercises(), getWorkoutSessions()]);
+  const prs = bestSetsByExercise(sessions);
+  const lastSets = lastSetsByExercise(sessions);
   let routine = null;
   let existingSession = null;
 
+  // A new exercise in the draft, with weights carried forward from the last
+  // time it was done (see progression.js). A routine exercise gets one row per
+  // max target set; reps stay blank, and rows without reps aren't saved.
+  function newDraftExercise(exerciseId, name, re = {}) {
+    const target = {
+      targetSets: re.targetSets || null,
+      targetSetsMax: re.targetSetsMax || null,
+      targetReps: re.targetReps || null,
+      targetRepsMax: re.targetRepsMax || null,
+    };
+    const weight = suggestWeight(lastSets.get(exerciseId), target);
+    const rows = target.targetSetsMax || target.targetSets || 1;
+    return {
+      key: uid(),
+      exerciseId,
+      name,
+      ...target,
+      sets: Array.from({ length: rows }, () => ({ weight: weight == null ? '' : String(weight), reps: '' })),
+    };
+  }
+
   if (params.sessionId) {
-    const sessions = await getWorkoutSessions();
     existingSession = sessions.find((s) => s.id === params.sessionId) || null;
     if (!existingSession) {
       container.appendChild(el('<div class="screen"><p>Workout not found.</p></div>'));
@@ -66,16 +89,7 @@ async function renderStrengthWorkout(container, params, tabsActive) {
   } else if (routine) {
     for (const re of routine.exercises) {
       const ex = exercises.find((e) => e.id === re.exerciseId);
-      draft.exercises.push({
-        key: uid(),
-        exerciseId: re.exerciseId,
-        name: ex ? ex.name : 'Unknown exercise',
-        targetSets: re.targetSets || null,
-        targetSetsMax: re.targetSetsMax || null,
-        targetReps: re.targetReps || null,
-        targetRepsMax: re.targetRepsMax || null,
-        sets: [{ weight: '', reps: '' }],
-      });
+      draft.exercises.push(newDraftExercise(re.exerciseId, ex ? ex.name : 'Unknown exercise', re));
     }
   }
 
@@ -124,9 +138,14 @@ async function renderStrengthWorkout(container, params, tabsActive) {
   }
 
   function renderExerciseBlock(de) {
-    const target = de.targetSets || de.targetReps
-      ? `<div class="hint">Target: ${formatRange(de.targetSets, de.targetSetsMax) ?? '?'} x ${formatRange(de.targetReps, de.targetRepsMax) ?? '?'}</div>`
-      : '';
+    const pr = prs.get(de.exerciseId);
+    const hintParts = [
+      de.targetSets || de.targetReps
+        ? `Target: ${formatRange(de.targetSets, de.targetSetsMax) ?? '?'} x ${formatRange(de.targetReps, de.targetRepsMax) ?? '?'}`
+        : null,
+      pr ? `<span class="pr-tag">PR: ${pr.weight} lbs × ${pr.reps}</span>` : null,
+    ].filter(Boolean);
+    const target = hintParts.length ? `<div class="hint">${hintParts.join(' · ')}</div>` : '';
     const block = el(`
       <div class="exercise-block" data-key="${de.key}">
         <div class="exercise-header">
@@ -185,16 +204,7 @@ async function renderStrengthWorkout(container, params, tabsActive) {
       showToast('Already added');
       return;
     }
-    draft.exercises.push({
-      key: uid(),
-      exerciseId: chosen.id,
-      name: chosen.name,
-      targetSets: null,
-      targetSetsMax: null,
-      targetReps: null,
-      targetRepsMax: null,
-      sets: [{ weight: '', reps: '' }],
-    });
+    draft.exercises.push(newDraftExercise(chosen.id, chosen.name));
     renderList();
   });
 
@@ -208,16 +218,7 @@ async function renderStrengthWorkout(container, params, tabsActive) {
     for (const re of chosen.exercises) {
       if (draft.exercises.some((d) => d.exerciseId === re.exerciseId)) { skipped++; continue; }
       const ex = exercises.find((e) => e.id === re.exerciseId);
-      draft.exercises.push({
-        key: uid(),
-        exerciseId: re.exerciseId,
-        name: ex ? ex.name : 'Unknown exercise',
-        targetSets: re.targetSets || null,
-        targetSetsMax: re.targetSetsMax || null,
-        targetReps: re.targetReps || null,
-        targetRepsMax: re.targetRepsMax || null,
-        sets: [{ weight: '', reps: '' }],
-      });
+      draft.exercises.push(newDraftExercise(re.exerciseId, ex ? ex.name : 'Unknown exercise', re));
       added++;
     }
     renderList();

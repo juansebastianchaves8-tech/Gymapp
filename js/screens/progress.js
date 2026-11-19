@@ -1,6 +1,7 @@
 import { getWorkoutSessions, getExercises, getBodyMetrics, getCardioSessions, getSettings } from '../db.js';
 import { el, epley1RM, round1, getWeekStart, isoDate, formatDate, formatWeekLabel, escapeHtml } from '../util.js';
 import { loadChartJs, CHART_COLORS, lineChart, barChart, goalDataset, createChartManager } from '../charts.js';
+import { bestSetsByExercise } from '../progression.js';
 
 export async function renderProgress(container) {
   const charts = createChartManager();
@@ -21,15 +22,7 @@ export async function renderProgress(container) {
     .sort((a, b) => exerciseUsage.get(b.id) - exerciseUsage.get(a.id));
 
   // Full PR list: heaviest weight ever per exercise.
-  const prMap = new Map();
-  sessionsAsc.forEach((s) => s.exercises.forEach((se) => {
-    se.sets.forEach((set) => {
-      const cur = prMap.get(se.exerciseId);
-      if (!cur || set.weight > cur.weight) {
-        prMap.set(se.exerciseId, { weight: set.weight, reps: set.reps, date: s.date });
-      }
-    });
-  }));
+  const prMap = bestSetsByExercise(sessions);
   const prList = exercises
     .filter((e) => prMap.has(e.id))
     .map((e) => ({ ...prMap.get(e.id), name: e.name }))

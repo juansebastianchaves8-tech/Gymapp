@@ -90,4 +90,5 @@ first run.
 - Weight is always in lbs.
 - The workout week runs Monday–Sunday. Streak logic lives in `js/streak.js`.
 - PRs are heaviest weight ever lifted per exercise (not formula-estimated). Estimated 1RM (shown on the Progress screen) uses the Epley formula.
+- New workouts pre-fill each exercise's weight from the last set the previous time it was done, plus 5 lbs if at least the routine's max target sets reached its max target reps. Rules live in `js/progression.js`.
 - `scripts/gen-icons.js` regenerates the PWA icons in `icons/` if you want to change them (pure Node, no dependencies).
